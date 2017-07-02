@@ -1,71 +1,117 @@
-// Copyright (c) 2016 Dimitri Sokolyuk. All rights reserved.
-// Use of this source code is governed by ISC-style license
-// that can be found in the LICENSE file.
-
-// Package last implements parser of lastlog file on UNIX systems
 package last
 
 /*
+#if !defined(_WIN32) && !defined(_WIN64)
 #include <fcntl.h>
-#include <utmp.h>
 #include <unistd.h>
-
-time_t
-last(int uid)
+#include <stdlib.h>
+#include <utmp.h>
+struct lastlog* new_lastlog()
 {
-	struct lastlog ll = {};
-	off_t pos = (off_t)uid * sizeof(ll);
+	struct lastlog* pNew = malloc(sizeof(struct lastlog));
+	return pNew;
+}
+int get_lastlog(int uid, struct lastlog* pl)
+{
+	off_t pos = (off_t)uid * sizeof(struct lastlog);
 	int fd = open(_PATH_LASTLOG, O_RDONLY, 0);
 	if (fd >= 0) {
-		pread(fd, &ll, sizeof(ll), pos);
+		ssize_t rxLen = pread(fd, pl, sizeof(struct lastlog), pos);
 		close(fd);
+		return rxLen==sizeof(struct lastlog)?0:-1;
 	}
-	return ll.ll_time;
+	return -1;
 }
+
+int lastlog_gettime(const struct lastlog* pl)
+{
+	return pl->ll_time;
+}
+
+const char* lastlog_gethost(const struct lastlog* pl)
+{
+	return pl->ll_host;
+}
+
+const char* lastlog_getline(const struct lastlog* pl)
+{
+	return pl->ll_line;
+}
+#else
+#include <stdlib.h>
+struct lastlog* new_lastlog()
+{
+	struct lastlog* pNew = malloc(1);
+	return pNew;
+}
+
+int get_lastlog(int uid, struct lastlog* pl)
+{
+	return -2;
+}
+
+int lastlog_gettime(const struct lastlog* pl)
+{
+	return 0;
+}
+
+const char* lastlog_gethost(const struct lastlog* pl)
+{
+	return "";
+}
+
+const char* lastlog_getline(const struct lastlog* pl)
+{
+	return "";
+}
+
+#endif
+
 */
 import "C"
 
 import (
 	"errors"
-	"os/user"
-	"strconv"
-	"time"
+	"unsafe"
 )
 
+type LastLogGo struct {
+	Time int64
+	Host string
+	Line string
+}
+
 var ErrNever = errors.New("never logged in")
+var ErrMemory = errors.New("alloc memory error")
+var ErrUnspportPlat = errors.New("only support unix like systemp")
+
+func lastlogCToGo(pl *C.struct_lastlog) LastLogGo {
+	var llg LastLogGo
+	llg.Time = int64(int32(C.lastlog_gettime(pl)))
+	llg.Line = C.GoString(C.lastlog_getline(pl))
+	llg.Host = C.GoString(C.lastlog_gethost(pl))
+	return llg
+}
 
 // ByUID returns last system login of user by UID
-func ByUID(uid int) (time.Time, error) {
-	t := C.last(C.int(uid))
-	if t == 0 {
-		return time.Time{}, ErrNever
-	}
-	return time.Unix(int64(t), 0), nil
-}
+func ByUID(uid int) (LastLogGo, error) {
+	var llg LastLogGo
 
-// ByUser returns last system login of speciefed User
-func ByUser(u *user.User) (time.Time, error) {
-	uid, err := strconv.Atoi(u.Uid)
-	if err != nil {
-		return time.Time{}, err
+	pl := C.new_lastlog()
+	if pl == nil {
+		return llg, ErrMemory
 	}
-	return ByUID(uid)
-}
+	defer C.free(unsafe.Pointer(pl))
 
-// Current returns last login of current user
-func Current() (time.Time, error) {
-	cur, err := user.Current()
-	if err != nil {
-		return time.Time{}, err
+	r := C.get_lastlog(C.int(uid), pl)
+	switch int(r) {
+	case 0:
+		return lastlogCToGo(pl), nil
+	case -2:
+		return llg, ErrUnspportPlat
+	default:
+	case -1:
+		return llg, ErrNever
 	}
-	return ByUser(cur)
-}
-
-// Username returns last login by username
-func Username(name string) (time.Time, error) {
-	u, err := user.Lookup(name)
-	if err != nil {
-		return time.Time{}, err
-	}
-	return ByUser(u)
+	return llg, nil
 }
