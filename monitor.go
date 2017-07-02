@@ -32,8 +32,9 @@ type UnixLogMonitor struct {
 	watcher watch.FileWatcher
 	changes *watch.FileChanges
 
-	LastLog  chan *UnixLogEvent
-	lastLogs [UNIX_UIDMAX]LastLogGo
+	LastLog    chan *UnixLogEvent
+	lastLogs   [UNIX_UIDMAX]LastLogGo
+	firstCheck bool
 
 	tomb.Tomb // provides: Done, Kill, Dying
 	//	lk sync.Mutex
@@ -53,6 +54,7 @@ func NewUnixLogMonitor(name string) (*UnixLogMonitor, error) {
 	//to avoid block
 	ul.LastLog = make(chan *UnixLogEvent, UNIX_UIDMAX)
 	ul.name = name
+	ul.firstCheck = true
 	go ul.startMonitor()
 	return &ul, nil
 }
@@ -69,6 +71,11 @@ func (ul *UnixLogMonitor) doCheck() {
 			llgs[i] = llg
 		}
 	}
+	if ul.firstCheck {
+		ul.firstCheck = false
+		return
+	}
+
 	for i := 0; i < UNIX_UIDMAX; i++ {
 		if ul.lastLogs[i] != llgs[i] {
 			ul.LastLog <- &UnixLogEvent{i, llgs[i]}
