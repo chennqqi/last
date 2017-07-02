@@ -79,6 +79,7 @@ func (ul *UnixLogMonitor) doCheck() {
 
 func (ul *UnixLogMonitor) startMonitor() error {
 	defer ul.Done()
+	defer close(ul.LastLog)
 
 	//init data
 	for i := 0; i < UNIX_UIDMAX; i++ {
@@ -163,4 +164,9 @@ func (ul *UnixLogMonitor) startMonitor() error {
 
 func (ul *UnixLogMonitor) Cleanup() {
 	watch.Cleanup(ul.name)
+}
+
+func (ul *UnixLogMonitor) Stop() error {
+	ul.Kill(nil)
+	return ul.Wait()
 }
