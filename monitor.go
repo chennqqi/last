@@ -167,6 +167,7 @@ func (ul *UnixLogMonitor) startMonitor() error {
 			log.Printf("Successfully reopened truncated %s", ul.name)
 		case <-ul.Dying():
 			log.Println("quit unixlog monitor", ul.name)
+			return nil
 		}
 	}
 }
