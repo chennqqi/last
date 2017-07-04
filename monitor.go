@@ -140,7 +140,7 @@ func (ul *UnixLogMonitor) startMonitor() error {
 		select {
 		case <-ul.changes.Deleted:
 			ul.changes = nil
-			fmt.Println("deleted")
+			//fmt.Println("deleted")
 			if true {
 				// XXX: we must not log from a library.
 				log.Printf("Re-opening moved/deleted file %s ...", ul.name)
@@ -154,10 +154,10 @@ func (ul *UnixLogMonitor) startMonitor() error {
 			}
 
 		case <-ul.changes.Modified:
-			fmt.Println("modified")
+			//fmt.Println("modified")
 
 		case <-ul.changes.Truncated:
-			fmt.Println("truncated")
+			//fmt.Println("truncated")
 
 			// Always reopen truncated files (Follow is true)
 			log.Printf("Re-opening truncated file %s ...", ul.name)
@@ -165,6 +165,8 @@ func (ul *UnixLogMonitor) startMonitor() error {
 				return err
 			}
 			log.Printf("Successfully reopened truncated %s", ul.name)
+		case <-ul.Dying():
+			log.Println("quit unixlog monitor", ul.name)
 		}
 	}
 }
