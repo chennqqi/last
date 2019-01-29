@@ -35,6 +35,7 @@ type UnixLogMonitor struct {
 	LastLog    chan *UnixLogEvent
 	lastLogs   [UNIX_UIDMAX]LastLogGo
 	firstCheck bool
+	pollMode   bool
 
 	tomb.Tomb // provides: Done, Kill, Dying
 	//	lk sync.Mutex
@@ -48,8 +49,10 @@ func NewUnixLogMonitor(name string) (*UnixLogMonitor, error) {
 	var ul UnixLogMonitor
 	if PollMode {
 		ul.watcher = watch.NewPollingFileWatcher(name)
+		ul.pollMode = true
 	} else {
 		ul.watcher = watch.NewInotifyFileWatcher(name)
+		ul.pollMode = false
 	}
 	//to avoid block
 	ul.LastLog = make(chan *UnixLogEvent, UNIX_UIDMAX)
@@ -173,7 +176,9 @@ func (ul *UnixLogMonitor) startMonitor() error {
 }
 
 func (ul *UnixLogMonitor) Cleanup() {
-	watch.Cleanup(ul.name)
+	if !ul.pollMode {
+		watch.Cleanup(ul.name)
+	}
 }
 
 func (ul *UnixLogMonitor) Stop() error {
